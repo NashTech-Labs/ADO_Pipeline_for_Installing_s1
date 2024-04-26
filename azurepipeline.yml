@@ -1,0 +1,73 @@
+trigger: none
+
+variables:
+- group: Installing S1 for Windows
+
+parameters:
+  - name: subscription_id
+    displayName: 'Subscription Id'
+    default: "XXXXXXXXXX"
+    type: string
+  - name: tenant_id
+    displayName: 'Tenant Id'
+    default: "XXXXXXXXXX"
+    type: string
+  - name: resource_group
+    displayName: 'Resource Group'
+    default: "DEV-RG"
+    type: string
+  - name: storageAccountName
+    displayName: 'Storage Account Name'
+    default: "devlab"
+    type: string
+  - name: containerName
+    displayName: 'Container Name'
+    default: "s1"
+    type: string
+  - name: initbackend
+    type: string
+    default: 'azure'
+  - name: ProjectName
+    type: string
+    default: 'SentinelOne'
+
+
+steps:
+- task: TerraformTaskV4@4
+  displayName: 'Terraform Init Using Azure Backend for ${{ parameters.ProjectName }}'
+  name: 'TerraformInitAzure'
+  condition: eq( '${{ parameters.initbackend }}', 'azure')
+  inputs:
+    provider: 'azurerm'
+    command: 'init'
+    backendServiceArm: SentinelOneInternalLab
+    backendAzureRmResourceGroupName: ${{ parameters.resource_group }}
+    backendAzureRmStorageAccountName: ${{ parameters.storageAccountName }}
+    backendAzureRmContainerName: ${{ parameters.containerName }}
+    backendAzureRmKey: 'terraform.tfstate'
+    client_id: $(client_id)
+    client_secret: $(client_secret)
+- task: TerraformTaskV4@4
+  name: terraformPlan
+  displayName: Create Terraform Plan
+  inputs:
+    provider: 'azurerm'
+    command: 'plan'
+    commandOptions: '-var client_id=$(client_id) -var client_secret=$(client_secret) -var sentinel_apikey=$(sentinel_apikey) -var sentinel_token=$(sentinel_token) -var resource_group=$(resource_group) -var subscription_id=$(subscription_id) -var tenant_id=$(tenant_id)'
+    environmentServiceNameAzureRM: SentinelOneInternalLab
+    backendAzureRmResourceGroupName: ${{ parameters.resource_group }}
+    backendAzureRmStorageAccountName: ${{ parameters.storageAccountName }}
+    backendAzureRmContainerName: ${{ parameters.containerName }}
+    backendAzureRmKey: 'state.tfstate'
+    client_id: $(client_id)
+    client_secret: $(client_secret)
+
+# Only runs if the 'terraformPlan' task has detected changes the in state. 
+- task: TerraformTaskV4@4
+  displayName: Apply Terraform Plan
+  condition: eq(variables['terraformPlan.changesPresent'], 'true')
+  inputs:
+    provider: 'azurerm'
+    command: 'apply'
+    commandOptions: '-auto-approve -var client_id=$(client_id) -var client_secret=$(client_secret) -var sentinel_apikey=$(sentinel_apikey) -var sentinel_token=$(sentinel_token) -var resource_group=$(resource_group) -var subscription_id=$(subscription_id) -var tenant_id=$(tenant_id)'
+    environmentServiceNameAzureRM: 'SentinelOneInternalLab'
